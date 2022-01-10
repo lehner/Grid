@@ -28,38 +28,62 @@ directory
 /*  END LEGAL */
 #include <Grid/Grid.h>
 
-using namespace Grid;
- 
+std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
+int bj_asynch = 0;
+int bj_max_iter_diff = 0;
 
-int main (int argc, char ** argv)
-{
+using namespace Grid;
+
+int main (int argc, char ** argv) {
+	
   Grid_init(&argc,&argv);
 
+  //BJ: Read in parameters from file
+  std::ifstream fin;
+  fin.open("settings.txt");
+  std::string param_name;
+  int param_value;
+  fin >> param_name >> param_value;
+  bj_asynch = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  bj_max_iter_diff = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  int restart_length = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  int max_iterations = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin.close();
+  
   Coordinate latt_size   = GridDefaultLatt();
   Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());
   Coordinate mpi_layout  = GridDefaultMpi();
-  GridCartesian               Grid(latt_size,simd_layout,mpi_layout);
-  GridRedBlackCartesian     RBGrid(&Grid);
+  GridCartesian Grid(latt_size,simd_layout,mpi_layout);
+  GridRedBlackCartesian RBGrid(&Grid);
 
   std::vector<int> seeds({1,2,3,4});
-  GridParallelRNG          pRNG(&Grid);  pRNG.SeedFixedIntegers(seeds);
+  GridParallelRNG pRNG(&Grid);  pRNG.SeedFixedIntegers(seeds);
 
-  LatticeFermion src(&Grid); random(pRNG,src);
+  LatticeFermion src(&Grid);
+  random(pRNG,src);
   RealD nrm = norm2(src);
   LatticeFermion result(&Grid); result=Zero();
   LatticeGaugeField Umu(&Grid); SU<Nc>::HotConfiguration(pRNG,Umu);
 
-  double volume=1;
+  double volume = 1;
   for(int mu=0;mu<Nd;mu++){
     volume=volume*latt_size[mu];
   }
 
-  RealD mass=0.5;
+  RealD mass = 0.5;
   WilsonFermionR Dw(Umu,Grid,RBGrid,mass);
 
   MdagMLinearOperator<WilsonFermionR,LatticeFermion> HermOp(Dw);
-  GeneralisedMinimalResidual<LatticeFermion> GMRES(1.0e-8, 10000, 25);
+  GeneralisedMinimalResidual<LatticeFermion> GMRES(1.0e-8, max_iterations, restart_length);
   GMRES(HermOp,src,result);
 
   Grid_finalize();
+  
 }

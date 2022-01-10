@@ -33,6 +33,10 @@
 #include <Grid/stencil/SimpleCompressor.h>   // subdir aggregate
 #include <Grid/stencil/Lebesgue.h>   // subdir aggregate
 
+extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
+extern int bj_asynch;
+extern int bj_max_iter_diff;
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Must not lose sight that goal is to be able to construct really efficient
 // gather to a point stencil code. CSHIFT is not the best way, so need

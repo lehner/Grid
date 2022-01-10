@@ -103,6 +103,7 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     IterationCount = 0;
 
     for (int k=0; k<MaxNumberOfRestarts; k++) {
+	  printf("Iteration Operator: %d\n", k);
 
       cp = outerLoopBody(LinOp, src, psi, rsq);
 
@@ -161,6 +162,7 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     LinalgTimer.Stop();
 
     for (int i=0; i<RestartLength; i++) {
+	  printf("Iteration outerLoopBody: %d\n", i);
 
       IterationCount++;
 
