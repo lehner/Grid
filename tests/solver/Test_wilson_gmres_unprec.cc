@@ -36,6 +36,8 @@ using namespace Grid;
 
 int main (int argc, char ** argv) {
 	
+  //Test1
+	
   Grid_init(&argc,&argv);
 
   //BJ: Read in parameters from file
