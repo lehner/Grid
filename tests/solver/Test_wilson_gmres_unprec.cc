@@ -36,7 +36,7 @@ using namespace Grid;
 
 int main (int argc, char ** argv) {
 	
-  //Test1
+  //Test2
 	
   Grid_init(&argc,&argv);
 
