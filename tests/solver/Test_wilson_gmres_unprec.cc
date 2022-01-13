@@ -31,6 +31,8 @@ directory
 std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 int bj_asynch = 0;
 int bj_max_iter_diff = 0;
+int bj_iteration = 0;
+int bj_restart_length = 0;
 
 using namespace Grid;
 
@@ -48,9 +50,10 @@ int main (int argc, char ** argv) {
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
   bj_max_iter_diff = param_value;
+  if (bj_max_iter_diff < 1) {bj_max_iter_diff = 1;}
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
-  int restart_length = param_value;
+  bj_restart_length = param_value;
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
   int max_iterations = param_value;
@@ -81,7 +84,7 @@ int main (int argc, char ** argv) {
   WilsonFermionR Dw(Umu,Grid,RBGrid,mass);
 
   MdagMLinearOperator<WilsonFermionR,LatticeFermion> HermOp(Dw);
-  GeneralisedMinimalResidual<LatticeFermion> GMRES(1.0e-8, max_iterations, restart_length);
+  GeneralisedMinimalResidual<LatticeFermion> GMRES(1.0e-8, max_iterations, bj_restart_length);
   GMRES(HermOp,src,result);
 
   Grid_finalize();

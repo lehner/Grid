@@ -395,17 +395,17 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
 
   return off_node_bytes;
 }
-void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsRequest_t> &list,int dir)
-{
+void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsRequest_t> &list,int dir) {
+	
   int nreq=list.size();
-
   if (nreq==0) return;
-
+  
   std::vector<MPI_Status> status(nreq);
   int ierr = -1234;
-  if (bj_asynch) {ierr = 0;}
-  else {ierr = MPI_Waitall(nreq,&list[0],&status[0]);}
+  ierr = MPI_Waitall(nreq,&list[0],&status[0]);
+  
   assert(ierr==0);
+  
 }
 void CartesianCommunicator::StencilBarrier(void)
 {

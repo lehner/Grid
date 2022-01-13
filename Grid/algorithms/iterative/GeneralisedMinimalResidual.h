@@ -29,6 +29,8 @@ directory
 #ifndef GRID_GENERALISED_MINIMAL_RESIDUAL_H
 #define GRID_GENERALISED_MINIMAL_RESIDUAL_H
 
+extern int bj_iteration;
+
 namespace Grid {
 
 template<class Field>
@@ -103,7 +105,11 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     IterationCount = 0;
 
     for (int k=0; k<MaxNumberOfRestarts; k++) {
-	  printf("Iteration Operator: %d\n", k);
+	  //printf("Iteration Operator: %d\n", k);
+
+	  int me = -1;
+	  MPI_Comm_rank(MPI_COMM_WORLD, &me);
+	  printf("I am %d\n", me);
 
       cp = outerLoopBody(LinOp, src, psi, rsq);
 
@@ -162,9 +168,11 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     LinalgTimer.Stop();
 
     for (int i=0; i<RestartLength; i++) {
-	  printf("Iteration outerLoopBody: %d\n", i);
+	  //printf("Iteration outerLoopBody: %d\n", i);
 
       IterationCount++;
+	  bj_iteration = IterationCount;
+	  //printf("I am at iteration %d\n", IterationCount);
 
       arnoldiStep(LinOp, v, w, i);
 
@@ -176,7 +184,7 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
                 << " residual " << cp << " target " << rsq << std::endl;
 
       if ((i == RestartLength - 1) || (IterationCount == MaxIterations) || (cp <= rsq)) {
-
+		printf("Possibly restarting now, iteration is at: %d\n", IterationCount);
         computeSolution(v, psi, i);
 
         return cp;

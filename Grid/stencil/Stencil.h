@@ -36,6 +36,8 @@
 extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 extern int bj_asynch;
 extern int bj_max_iter_diff;
+extern int bj_iteration;
+extern int bj_restart_length;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Must not lose sight that goal is to be able to construct really efficient
@@ -435,35 +437,80 @@ public:
   ////////////////////////////////////////////////////////////////////////
   // Blocking send and receive. Either sequential or parallel.
   ////////////////////////////////////////////////////////////////////////
-  void Communicate(void)
-  {
+  void Communicate(void) {
+	  
+	//The if part is not relevant to me, straight to the else
     if ( CartesianCommunicator::CommunicatorPolicy == CartesianCommunicator::CommunicatorPolicySequential ){
-      thread_region {
-	// must be called in parallel region
-	int mythread  = thread_num();
-	int maxthreads= thread_max();
-	int nthreads = CartesianCommunicator::nCommThreads;
-	assert(nthreads <= maxthreads);
-	if (nthreads == -1) nthreads = 1;
-	if (mythread < nthreads) {
-	  for (int i = mythread; i < Packets.size(); i += nthreads) {
-	    double start = usecond();
-	    uint64_t bytes= _grid->StencilSendToRecvFrom(Packets[i].send_buf,
-							 Packets[i].to_rank,
-							 Packets[i].recv_buf,
-							 Packets[i].from_rank,
-							 Packets[i].bytes,i);
-	    comm_bytes_thr[mythread] += bytes;
-	    shm_bytes_thr[mythread]  += Packets[i].bytes - bytes;
-	    comm_time_thr[mythread]  += usecond() - start;
-	  }
+		thread_region {
+			// must be called in parallel region
+			int mythread  = thread_num();
+			int maxthreads= thread_max();
+			int nthreads = CartesianCommunicator::nCommThreads;
+			assert(nthreads <= maxthreads);
+			if (nthreads == -1) nthreads = 1;
+			if (mythread < nthreads) {
+			  for (int i = mythread; i < Packets.size(); i += nthreads) {
+				double start = usecond();
+				uint64_t bytes= _grid->StencilSendToRecvFrom(Packets[i].send_buf,
+									 Packets[i].to_rank,
+									 Packets[i].recv_buf,
+									 Packets[i].from_rank,
+									 Packets[i].bytes,i);
+				comm_bytes_thr[mythread] += bytes;
+				shm_bytes_thr[mythread]  += Packets[i].bytes - bytes;
+				comm_time_thr[mythread]  += usecond() - start;
+			  }
+			}
+		}
+    } else {
+		
+		//If comm request vector is not empty, check the oldest one for completion and delete it accordingly
+		if(bj_reqs.size() != 0) {
+			int done = 1;
+			for(int i = 0; i < bj_reqs[0].size(); i++) {
+				int ierr = -1234;
+				int flag = -1234;
+				ierr = MPI_Testall(bj_reqs[0][i].size(), &bj_reqs[0][i][0], &flag, MPI_STATUSES_IGNORE);
+				if (flag == 0) {done = 0;}
+				//printf("TESTALL: %d\n", flag);
+			}
+			if (done) {bj_reqs.erase(bj_reqs.begin());}
+		}
+		
+		//If we are about to restart, we wait for all earlier comms to finish
+		if (bj_iteration%bj_restart_length == 0) {
+			while (bj_reqs.size() != 0) {
+				printf("Should now wait for stuff since its a restart at iteration %d\n", bj_iteration);
+				for(int i = 0; i < bj_reqs[0].size(); i++) {
+					int ierr = -1234;
+					ierr = MPI_Waitall(bj_reqs[0][i].size(), &bj_reqs[0][i][0], MPI_STATUSES_IGNORE);
+				}
+				bj_reqs.erase(bj_reqs.begin());
+			}
+			MPI_Barrier(MPI_COMM_WORLD);
+		}
+		
+		//Create new reqs vector for this iteration and put it in the queue
+		std::vector<std::vector<CommsRequest_t> > reqs;
+		bj_reqs.push_back(reqs);
+		//Begin Communication and put the requests into the vector
+		this->CommunicateBegin(bj_reqs.back());
+		
+		//If not asynch (or if before a restart), do a waitall
+		if (bj_asynch == 0 || bj_iteration%bj_restart_length == 0) {
+			this->CommunicateComplete(bj_reqs.back());
+			bj_reqs.pop_back();
+			printf("Reqs is now size %d\n", bj_reqs.size());
+		}
+
+		//Print reqs
+		if (bj_iteration > 1 && 0) {
+			printf("Reqs vector size is: %d\n", bj_reqs.size());
+			//printf("Reqs[0] vector size is: %d\n", bj_reqs[0].size());
+			//printf("Reqs[0][0] vector size is: %d\n", bj_reqs[0][0].size());
+		}
 	}
-      }
-    } else { // Concurrent and non-threaded asynch calls to MPI
-      std::vector<std::vector<CommsRequest_t> > reqs;
-      this->CommunicateBegin(reqs);
-      this->CommunicateComplete(reqs);
-    }
+	
   }
 
   template<class compressor> void HaloExchange(const Lattice<vobj> &source,compressor &compress)
