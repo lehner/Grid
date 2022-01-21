@@ -337,6 +337,7 @@ public:
   {
     std::vector<std::vector<CommsRequest_t> > reqs;
     this->HaloExchangeOptGather(source,compress);
+	printf("trace HaloExchangeOpt\n");
     // Asynchronous MPI calls multidirectional, Isend etc...
     // Non-overlapped directions within a thread. Asynchronous calls except MPI3, threaded up to comm threads ways.
     this->Communicate();

@@ -28,8 +28,7 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 #include <Grid/GridCore.h>
 #include <Grid/communicator/SharedMemory.h>
 
-extern int bj_asynch;
-extern int bj_max_iter_diff;
+extern int bj_call_count;
 
 NAMESPACE_BEGIN(Grid);
 
@@ -401,10 +400,13 @@ void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsReque
   if (nreq==0) return;
   
   std::vector<MPI_Status> status(nreq);
-  int ierr = -1234;
-  ierr = MPI_Waitall(nreq,&list[0],&status[0]);
+  int ierr = MPI_Waitall(nreq,&list[0],&status[0]);
   
   assert(ierr==0);
+  //list.resize(0);
+  
+  bj_call_count+=1;
+  printf("Calls: %d\n", bj_call_count);
   
 }
 void CartesianCommunicator::StencilBarrier(void)

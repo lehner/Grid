@@ -28,6 +28,12 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
     /*  END LEGAL */
 #include <Grid/Grid.h>
 
+std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
+int bj_asynch = 0;
+int bj_max_iter_diff = 0;
+int bj_iteration = -1;
+int bj_restart_length = 0;
+
 using namespace std;
 using namespace Grid;
  ;
@@ -47,6 +53,26 @@ struct scal {
 int main (int argc, char ** argv)
 {
   Grid_init(&argc,&argv);
+
+  //BJ: Read in parameters from file
+  std::ifstream fin;
+  fin.open("settings.txt");
+  std::string param_name;
+  int param_value;
+  fin >> param_name >> param_value;
+  bj_asynch = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  bj_max_iter_diff = param_value;
+  if (bj_max_iter_diff < 1) {bj_max_iter_diff = 1;}
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  bj_restart_length = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  int max_iterations = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin.close();
 
   Coordinate latt_size   = GridDefaultLatt();
   Coordinate simd_layout = GridDefaultSimd(Nd,vComplex::Nsimd());

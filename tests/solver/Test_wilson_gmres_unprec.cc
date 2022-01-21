@@ -33,6 +33,7 @@ int bj_asynch = 0;
 int bj_max_iter_diff = 0;
 int bj_iteration = 0;
 int bj_restart_length = 0;
+int bj_call_count = 0;
 
 using namespace Grid;
 

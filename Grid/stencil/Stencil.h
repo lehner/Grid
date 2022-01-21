@@ -471,7 +471,7 @@ public:
 				int ierr = -1234;
 				int flag = -1234;
 				ierr = MPI_Testall(bj_reqs[0][i].size(), &bj_reqs[0][i][0], &flag, MPI_STATUSES_IGNORE);
-				if (flag == 0) {done = 0;}
+				if (flag != 1) {done = 0;}
 				//printf("TESTALL: %d\n", flag);
 			}
 			if (done) {bj_reqs.erase(bj_reqs.begin());}
@@ -504,10 +504,10 @@ public:
 		}
 
 		//Print reqs
-		if (bj_iteration > 1 && 0) {
+		if (bj_iteration > 1 && 1) {
 			printf("Reqs vector size is: %d\n", bj_reqs.size());
-			//printf("Reqs[0] vector size is: %d\n", bj_reqs[0].size());
-			//printf("Reqs[0][0] vector size is: %d\n", bj_reqs[0][0].size());
+			printf("Reqs[0] vector size is: %d\n", bj_reqs[0].size());
+			printf("Reqs[0][0] vector size is: %d\n", bj_reqs[0][0].size());
 		}
 	}
 	
@@ -515,6 +515,7 @@ public:
 
   template<class compressor> void HaloExchange(const Lattice<vobj> &source,compressor &compress)
   {
+	printf("trace HaloExchange\n");
     Prepare();
     HaloGather(source,compress);
     Communicate();

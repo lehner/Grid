@@ -30,6 +30,7 @@ directory
 #define GRID_GENERALISED_MINIMAL_RESIDUAL_H
 
 extern int bj_iteration;
+extern int bj_asynch;
 
 namespace Grid {
 
@@ -167,6 +168,9 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     v[0] = (1. / gamma[0]) * r;
     LinalgTimer.Stop();
 
+	MPI_Barrier(MPI_COMM_WORLD);
+	bj_asynch = 1;
+
     for (int i=0; i<RestartLength; i++) {
 	  //printf("Iteration outerLoopBody: %d\n", i);
 
@@ -186,7 +190,9 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
       if ((i == RestartLength - 1) || (IterationCount == MaxIterations) || (cp <= rsq)) {
 		printf("Possibly restarting now, iteration is at: %d\n", IterationCount);
         computeSolution(v, psi, i);
-
+		
+		MPI_Barrier(MPI_COMM_WORLD);
+		bj_asynch = 0;
         return cp;
       }
     }
