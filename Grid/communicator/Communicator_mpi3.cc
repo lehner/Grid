@@ -38,7 +38,8 @@ extern int bj_synchronous_restarts;
 extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 extern int bj_asynch;
 extern int bj_iteration;
-extern int bj_call_count;
+extern int bj_startsend_calls;
+extern int bj_completesend_calls;
 
 NAMESPACE_BEGIN(Grid);
 
@@ -364,7 +365,10 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
 							 void *recv,
 							 int from,
 							 int bytes,int dir) {
-	
+
+  bj_startsend_calls+=1;
+  printf("Iteration: %d, Calls to Communicator_mpi3.cc -> StencilSendToRecvFromBegin: %d\n", bj_iteration, bj_startsend_calls);
+  
   int ncomm   = communicator_halo.size();
   int commdir = dir%ncomm;
 
@@ -384,7 +388,7 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
   
 
   if ((gfrom == MPI_UNDEFINED) || Stencil_force_mpi) {
-    tag = dir+from*32;
+    tag = bj_startsend_calls+dir+from*32;
     ierr = MPI_Irecv(recv, bytes, MPI_CHAR,from,tag,communicator_halo[commdir],&rrq);
     assert(ierr==0);
     list.push_back(rrq);
@@ -392,7 +396,7 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
   }
 
   if ((gdest == MPI_UNDEFINED) || Stencil_force_mpi) {
-    tag = dir+_processor*32;
+    tag = bj_startsend_calls+dir+_processor*32;
     ierr = MPI_Isend(xmit, bytes, MPI_CHAR,dest,tag,communicator_halo[commdir],&xrq);
     assert(ierr==0);
     list.push_back(xrq);
@@ -418,8 +422,8 @@ void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsReque
   assert(ierr==0);
   list.resize(0);
   
-  bj_call_count+=1;
-  printf("Iteration: %d, Calls to Communicator_mpi3.cc -> StencilSendToRecvFromComplete: %d\n", bj_iteration, bj_call_count);
+  bj_completesend_calls+=1;
+  printf("Iteration: %d, Calls to Communicator_mpi3.cc -> StencilSendToRecvFromComplete: %d\n", bj_iteration, bj_completesend_calls);
   
 }
 

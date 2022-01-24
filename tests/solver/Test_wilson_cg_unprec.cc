@@ -38,7 +38,8 @@ int bj_synchronous_restarts = 0;
 std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 int bj_asynch = 0;
 int bj_iteration = 0;
-int bj_call_count = 0;
+int bj_startsend_calls = 0;
+int bj_completesend_calls = 0;
 
 using namespace std;
 using namespace Grid;

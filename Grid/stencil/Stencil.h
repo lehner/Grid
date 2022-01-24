@@ -43,7 +43,8 @@ extern int bj_synchronous_restarts;
 extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 extern int bj_asynch;
 extern int bj_iteration;
-extern int bj_call_count;
+extern int bj_startsend_calls;
+extern int bj_completesend_calls;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Must not lose sight that goal is to be able to construct really efficient

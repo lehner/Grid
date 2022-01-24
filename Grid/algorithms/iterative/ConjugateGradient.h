@@ -31,6 +31,19 @@ directory
 #ifndef GRID_CONJUGATE_GRADIENT_H
 #define GRID_CONJUGATE_GRADIENT_H
 
+//BJ: Settings variables
+extern int bj_asynch_setting;
+extern int bj_max_iter_diff;
+extern int bj_restart_length;
+extern int bj_synchronous_restarts;
+
+//BJ: Working variables
+extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
+extern int bj_asynch;
+extern int bj_iteration;
+extern int bj_startsend_calls;
+extern int bj_completesend_calls;
+
 NAMESPACE_BEGIN(Grid);
 
 /////////////////////////////////////////////////////////////
