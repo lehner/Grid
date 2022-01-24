@@ -28,6 +28,16 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
 #include <Grid/GridCore.h>
 #include <Grid/communicator/SharedMemory.h>
 
+//BJ: Settings variables
+extern int bj_asynch_setting;
+extern int bj_max_iter_diff;
+extern int bj_restart_length;
+extern int bj_synchronous_restarts;
+
+//BJ: Working variables
+extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
+extern int bj_asynch;
+extern int bj_iteration;
 extern int bj_call_count;
 
 NAMESPACE_BEGIN(Grid);
@@ -353,15 +363,17 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
 							 int dest,
 							 void *recv,
 							 int from,
-							 int bytes,int dir)
-{
-  int ncomm  =communicator_halo.size();
-  int commdir=dir%ncomm;
-
-  MPI_Request xrq;
-  MPI_Request rrq;
+							 int bytes,int dir) {
+	
+  int ncomm   = communicator_halo.size();
+  int commdir = dir%ncomm;
 
   int ierr;
+  int tag;
+  MPI_Request xrq;
+  MPI_Request rrq;
+  double off_node_bytes = 0.0;
+
   int gdest = ShmRanks[dest];
   int gfrom = ShmRanks[from];
   int gme   = ShmRanks[_processor];
@@ -369,30 +381,31 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
   assert(dest != _processor);
   assert(from != _processor);
   assert(gme  == ShmRank);
-  double off_node_bytes=0.0;
-  int tag;
+  
 
-  if ( (gfrom ==MPI_UNDEFINED) || Stencil_force_mpi ) {
-    tag= dir+from*32;
-    ierr=MPI_Irecv(recv, bytes, MPI_CHAR,from,tag,communicator_halo[commdir],&rrq);
+  if ((gfrom == MPI_UNDEFINED) || Stencil_force_mpi) {
+    tag = dir+from*32;
+    ierr = MPI_Irecv(recv, bytes, MPI_CHAR,from,tag,communicator_halo[commdir],&rrq);
     assert(ierr==0);
     list.push_back(rrq);
     off_node_bytes+=bytes;
   }
 
-  if ( (gdest == MPI_UNDEFINED) || Stencil_force_mpi ) {
-    tag= dir+_processor*32;
-    ierr =MPI_Isend(xmit, bytes, MPI_CHAR,dest,tag,communicator_halo[commdir],&xrq);
+  if ((gdest == MPI_UNDEFINED) || Stencil_force_mpi) {
+    tag = dir+_processor*32;
+    ierr = MPI_Isend(xmit, bytes, MPI_CHAR,dest,tag,communicator_halo[commdir],&xrq);
     assert(ierr==0);
     list.push_back(xrq);
     off_node_bytes+=bytes;
   }
 
-  if ( CommunicatorPolicy == CommunicatorPolicySequential ) {
+  if (CommunicatorPolicy == CommunicatorPolicySequential) {
+	printf("Trace: StencilSendToRecvFromBegin -> calling complete function now!\n");
     this->StencilSendToRecvFromComplete(list,dir);
   }
 
   return off_node_bytes;
+  
 }
 void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsRequest_t> &list,int dir) {
 	
@@ -403,19 +416,21 @@ void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsReque
   int ierr = MPI_Waitall(nreq,&list[0],&status[0]);
   
   assert(ierr==0);
-  //list.resize(0);
+  list.resize(0);
   
   bj_call_count+=1;
-  printf("Calls: %d\n", bj_call_count);
+  printf("Iteration: %d, Calls to Communicator_mpi3.cc -> StencilSendToRecvFromComplete: %d\n", bj_iteration, bj_call_count);
   
 }
-void CartesianCommunicator::StencilBarrier(void)
-{
+
+void CartesianCommunicator::StencilBarrier(void) {
   MPI_Barrier  (ShmComm);
 }
+
 //void CartesianCommunicator::SendToRecvFromComplete(std::vector<CommsRequest_t> &list)
 //{
 //}
+
 void CartesianCommunicator::Barrier(void)
 {
   int ierr = MPI_Barrier(communicator);

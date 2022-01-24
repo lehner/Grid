@@ -29,8 +29,17 @@ directory
 #ifndef GRID_GENERALISED_MINIMAL_RESIDUAL_H
 #define GRID_GENERALISED_MINIMAL_RESIDUAL_H
 
-extern int bj_iteration;
+//BJ: Settings variables
+extern int bj_asynch_setting;
+extern int bj_max_iter_diff;
+extern int bj_restart_length;
+extern int bj_synchronous_restarts;
+
+//BJ: Working variables
+extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 extern int bj_asynch;
+extern int bj_iteration;
+extern int bj_call_count;
 
 namespace Grid {
 
@@ -39,16 +48,14 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
  public:
   using OperatorFunction<Field>::operator();
 
-  bool ErrorOnNoConverge; // Throw an assert when GMRES fails to converge,
-                          // defaults to true
+  bool ErrorOnNoConverge;
 
   RealD   Tolerance;
 
   Integer MaxIterations;
   Integer RestartLength;
   Integer MaxNumberOfRestarts;
-  Integer IterationCount; // Number of iterations the GMRES took to finish,
-                          // filled in upon completion
+  Integer IterationCount; 
 
   GridStopWatch MatrixTimer;
   GridStopWatch LinalgTimer;
@@ -78,6 +85,8 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
       , s(RestartLength + 1, 0.) {};
 
   void operator()(LinearOperatorBase<Field> &LinOp, const Field &src, Field &psi) {
+	
+	bj_asynch = 0; //Turn asynch off so it the first communication is synch
 
     psi.Checkerboard() = src.Checkerboard();
     conformable(psi, src);
@@ -106,11 +115,6 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     IterationCount = 0;
 
     for (int k=0; k<MaxNumberOfRestarts; k++) {
-	  //printf("Iteration Operator: %d\n", k);
-
-	  int me = -1;
-	  MPI_Comm_rank(MPI_COMM_WORLD, &me);
-	  printf("I am %d\n", me);
 
       cp = outerLoopBody(LinOp, src, psi, rsq);
 
@@ -119,6 +123,7 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
 
         SolverTimer.Stop();
 
+	    bj_asynch = 0; //Turn asynch off for calculation of result
         LinOp.Op(psi,r);
         axpy(r,-1.0,src,r);
 
@@ -137,13 +142,15 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
         std::cout << GridLogMessage << "GMRES Time elapsed: QR      " <<           QrTimer.Elapsed() << std::endl;
         std::cout << GridLogMessage << "GMRES Time elapsed: CompSol " << CompSolutionTimer.Elapsed() << std::endl;
         return;
+		
       }
+	  
     }
 
     std::cout << GridLogMessage << "GeneralisedMinimalResidual did NOT converge" << std::endl;
 
-    if (ErrorOnNoConverge)
-      assert(0);
+    if (ErrorOnNoConverge) {assert(0);}
+	
   }
 
   RealD outerLoopBody(LinearOperatorBase<Field> &LinOp, const Field &src, Field &psi, RealD rsq) {
@@ -168,11 +175,9 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     v[0] = (1. / gamma[0]) * r;
     LinalgTimer.Stop();
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	bj_asynch = 1;
-
     for (int i=0; i<RestartLength; i++) {
-	  //printf("Iteration outerLoopBody: %d\n", i);
+
+	  if (bj_asynch_setting == 1) {bj_asynch = 1;} //Turn asynch on for the iterations
 
       IterationCount++;
 	  bj_iteration = IterationCount;
@@ -188,17 +193,17 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
                 << " residual " << cp << " target " << rsq << std::endl;
 
       if ((i == RestartLength - 1) || (IterationCount == MaxIterations) || (cp <= rsq)) {
-		printf("Possibly restarting now, iteration is at: %d\n", IterationCount);
+	    if (bj_asynch_setting == 1 && bj_synchronous_restarts == 1) {bj_asynch = 0;}
         computeSolution(v, psi, i);
-		
-		MPI_Barrier(MPI_COMM_WORLD);
-		bj_asynch = 0;
         return cp;
       }
+	  
     }
 
-    assert(0); // Never reached
+	// Never reached
+    assert(0);
     return cp;
+	
   }
 
   void arnoldiStep(LinearOperatorBase<Field> &LinOp, std::vector<Field> &v, Field &w, int iter) {
@@ -208,6 +213,7 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     MatrixTimer.Stop();
 
     LinalgTimer.Start();
+	
     for (int i = 0; i <= iter; ++i) {
       H(iter, i) = innerProduct(v[i], w);
       w = w - ComplexD(H(iter, i)) * v[i];
@@ -215,12 +221,15 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
 
     H(iter, iter + 1) = sqrt(norm2(w));
     v[iter + 1] = ComplexD(1. / H(iter, iter + 1)) * w;
+	
     LinalgTimer.Stop();
+	
   }
 
   void qrUpdate(int iter) {
 
     QrTimer.Start();
+	
     for (int i = 0; i < iter ; ++i) {
       auto tmp       = -s[i] * ComplexD(H(iter, i)) + c[i] * ComplexD(H(iter, i + 1));
       H(iter, i)     = conjugate(c[i]) * ComplexD(H(iter, i)) + conjugate(s[i]) * ComplexD(H(iter, i + 1));
@@ -238,23 +247,36 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
 
     gamma[iter + 1] = -s[iter] * gamma[iter];
     gamma[iter]     = conjugate(c[iter]) * gamma[iter];
+	
     QrTimer.Stop();
+	
   }
 
   void computeSolution(std::vector<Field> const &v, Field &psi, int iter) {
 
     CompSolutionTimer.Start();
+	
     for (int i = iter; i >= 0; i--) {
+		
       y[i] = gamma[i];
-      for (int k = i + 1; k <= iter; k++)
+	  
+      for (int k = i + 1; k <= iter; k++) {
         y[i] = y[i] - ComplexD(H(k, i)) * y[k];
+	  }
+	  
       y[i] = y[i] / ComplexD(H(i, i));
+	  
     }
 
-    for (int i = 0; i <= iter; i++)
+    for (int i = 0; i <= iter; i++) {
       psi = psi + v[i] * y[i];
+	}
+	
     CompSolutionTimer.Stop();
+	
   }
+  
 };
+
 }
 #endif

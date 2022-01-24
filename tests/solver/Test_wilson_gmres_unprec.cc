@@ -28,11 +28,16 @@ directory
 /*  END LEGAL */
 #include <Grid/Grid.h>
 
+//BJ: Settings variables
+int bj_asynch_setting = 0;
+int bj_max_iter_diff = 0;
+int bj_restart_length = 0;
+int bj_synchronous_restarts = 0;
+
+//BJ: Working variables
 std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 int bj_asynch = 0;
-int bj_max_iter_diff = 0;
 int bj_iteration = 0;
-int bj_restart_length = 0;
 int bj_call_count = 0;
 
 using namespace Grid;
@@ -46,12 +51,13 @@ int main (int argc, char ** argv) {
   fin.open("settings.txt");
   std::string param_name;
   int param_value;
+  
   fin >> param_name >> param_value;
-  bj_asynch = param_value;
+  bj_asynch_setting = param_value;
+  if (bj_asynch_setting == 1) {bj_asynch = 1;}
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
   bj_max_iter_diff = param_value;
-  if (bj_max_iter_diff < 1) {bj_max_iter_diff = 1;}
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
   bj_restart_length = param_value;
@@ -59,6 +65,10 @@ int main (int argc, char ** argv) {
   fin >> param_name >> param_value;
   int max_iterations = param_value;
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  bj_synchronous_restarts = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+
   fin.close();
   
   Coordinate latt_size   = GridDefaultLatt();
@@ -68,13 +78,19 @@ int main (int argc, char ** argv) {
   GridRedBlackCartesian RBGrid(&Grid);
 
   std::vector<int> seeds({1,2,3,4});
-  GridParallelRNG pRNG(&Grid);  pRNG.SeedFixedIntegers(seeds);
+  GridParallelRNG pRNG(&Grid);
+  pRNG.SeedFixedIntegers(seeds);
 
   LatticeFermion src(&Grid);
   random(pRNG,src);
+  
   RealD nrm = norm2(src);
-  LatticeFermion result(&Grid); result=Zero();
-  LatticeGaugeField Umu(&Grid); SU<Nc>::HotConfiguration(pRNG,Umu);
+  
+  LatticeFermion result(&Grid);
+  result=Zero();
+  
+  LatticeGaugeField Umu(&Grid);
+  SU<Nc>::HotConfiguration(pRNG,Umu);
 
   double volume = 1;
   for(int mu=0;mu<Nd;mu++){

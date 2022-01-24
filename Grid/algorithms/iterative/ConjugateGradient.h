@@ -120,6 +120,7 @@ public:
     SolverTimer.Start();
     int k;
     for (k = 1; k <= MaxIterations; k++) {
+	  bj_iteration = k;
       c = cp;
 
       MatrixTimer.Start();

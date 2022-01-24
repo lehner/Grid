@@ -28,11 +28,17 @@ Author: Peter Boyle <paboyle@ph.ed.ac.uk>
     /*  END LEGAL */
 #include <Grid/Grid.h>
 
+//BJ: Settings variables
+int bj_asynch_setting = 0;
+int bj_max_iter_diff = 0;
+int bj_restart_length = 0;
+int bj_synchronous_restarts = 0;
+
+//BJ: Working variables
 std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
 int bj_asynch = 0;
-int bj_max_iter_diff = 0;
-int bj_iteration = -1;
-int bj_restart_length = 0;
+int bj_iteration = 0;
+int bj_call_count = 0;
 
 using namespace std;
 using namespace Grid;
@@ -50,8 +56,8 @@ struct scal {
     Gamma::Algebra::GammaT
   };
 
-int main (int argc, char ** argv)
-{
+int main (int argc, char ** argv) {
+	
   Grid_init(&argc,&argv);
 
   //BJ: Read in parameters from file
@@ -59,19 +65,20 @@ int main (int argc, char ** argv)
   fin.open("settings.txt");
   std::string param_name;
   int param_value;
+  
   fin >> param_name >> param_value;
-  bj_asynch = param_value;
+  bj_asynch_setting = param_value;
+  if (bj_asynch_setting == 1) {bj_asynch = 1;}
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
   bj_max_iter_diff = param_value;
-  if (bj_max_iter_diff < 1) {bj_max_iter_diff = 1;}
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
-  fin >> param_name >> param_value;
-  bj_restart_length = param_value;
-  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value; //restart_length - unused in this test
   fin >> param_name >> param_value;
   int max_iterations = param_value;
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value; //synchronous_restarts - unused in this test
+
   fin.close();
 
   Coordinate latt_size   = GridDefaultLatt();
