@@ -33,6 +33,7 @@ int bj_asynch_setting = 0;
 int bj_max_iter_diff = 0;
 int bj_restart_length = 0;
 int bj_synchronous_restarts = 0;
+int bj_me = -1;
 
 //BJ: Working variables
 std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
@@ -40,6 +41,7 @@ int bj_asynch = 0;
 int bj_iteration = 0;
 int bj_startsend_calls = 0;
 int bj_completesend_calls = 0;
+int bj_old_comms = 0;
 
 using namespace Grid;
 
@@ -53,6 +55,7 @@ int main (int argc, char ** argv) {
   std::string param_name;
   int param_value;
   
+  MPI_Comm_rank(MPI_COMM_WORLD, &bj_me);
   fin >> param_name >> param_value;
   bj_asynch_setting = param_value;
   if (bj_asynch_setting == 1) {bj_asynch = 1;}
@@ -68,6 +71,9 @@ int main (int argc, char ** argv) {
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value;
   bj_synchronous_restarts = param_value;
+  std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
+  fin >> param_name >> param_value;
+  int bj_save_result = param_value;
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
 
   fin.close();
@@ -102,8 +108,29 @@ int main (int argc, char ** argv) {
   WilsonFermionR Dw(Umu,Grid,RBGrid,mass);
 
   MdagMLinearOperator<WilsonFermionR,LatticeFermion> HermOp(Dw);
+  //NonHermitianLinearOperator<WilsonFermionR,LatticeFermion> HermOp(Dw); //same behavior as standard
   GeneralisedMinimalResidual<LatticeFermion> GMRES(1.0e-8, max_iterations, bj_restart_length);
   GMRES(HermOp,src,result);
+
+  //How many comms that were out of synch
+  printf("Old Cooms: %d\n", bj_old_comms);
+  
+  if (bj_save_result) {
+	//Write out result
+	std::string file1("./Propagator1");
+	emptyUserRecord record;
+	uint32_t nersc_csum;
+	uint32_t scidac_csuma;
+	uint32_t scidac_csumb;
+	typedef SpinColourVectorD   FermionD;
+	typedef vSpinColourVectorD vFermionD;
+
+	BinarySimpleMunger<FermionD,FermionD> munge;
+	std::string format = getFormatString<vFermionD>();
+	  
+	BinaryIO::writeLatticeObject<vFermionD,FermionD>(result, file1, munge, 0, format, nersc_csum, scidac_csuma, scidac_csumb);
+	std::cout << GridLogMessage << " CG checksums "<<std::hex << scidac_csuma << " "<<scidac_csumb<<std::endl;
+  }
 
   Grid_finalize();
   

@@ -33,6 +33,7 @@ int bj_asynch_setting = 0;
 int bj_max_iter_diff = 0;
 int bj_restart_length = 0;
 int bj_synchronous_restarts = 0;
+int bj_me = -1;
 
 //BJ: Working variables
 std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
@@ -40,6 +41,7 @@ int bj_asynch = 0;
 int bj_iteration = 0;
 int bj_startsend_calls = 0;
 int bj_completesend_calls = 0;
+int bj_old_comms = 0;
 
 using namespace std;
 using namespace Grid;
@@ -67,6 +69,7 @@ int main (int argc, char ** argv) {
   std::string param_name;
   int param_value;
   
+  MPI_Comm_rank(MPI_COMM_WORLD, &bj_me);
   fin >> param_name >> param_value;
   bj_asynch_setting = param_value;
   if (bj_asynch_setting == 1) {bj_asynch = 1;}
@@ -79,6 +82,7 @@ int main (int argc, char ** argv) {
   int max_iterations = param_value;
   std::cout << "BJ settings: " << param_name << " " << param_value << "\n";
   fin >> param_name >> param_value; //synchronous_restarts - unused in this test
+  fin >> param_name >> param_value; //bj_save_result - unused in this test.
 
   fin.close();
 
@@ -105,7 +109,7 @@ int main (int argc, char ** argv) {
   WilsonFermionR Dw(Umu,Grid,RBGrid,mass);
 
   MdagMLinearOperator<WilsonFermionR,LatticeFermion> HermOp(Dw);
-  ConjugateGradient<LatticeFermion> CG(1.0e-8,10000);
+  ConjugateGradient<LatticeFermion> CG(1.0e-8,max_iterations);
   CG(HermOp,src,result);
 
   Grid_finalize();

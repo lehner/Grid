@@ -36,6 +36,7 @@ extern int bj_asynch_setting;
 extern int bj_max_iter_diff;
 extern int bj_restart_length;
 extern int bj_synchronous_restarts;
+extern int bj_me;
 
 //BJ: Working variables
 extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
@@ -43,6 +44,7 @@ extern int bj_asynch;
 extern int bj_iteration;
 extern int bj_startsend_calls;
 extern int bj_completesend_calls;
+extern int bj_old_comms;
 
 NAMESPACE_BEGIN(Grid);
 
@@ -168,6 +170,10 @@ public:
 
       std::cout << GridLogIterative << "ConjugateGradient: Iteration " << k
                 << " residual " << sqrt(cp/ssq) << " target " << Tolerance << std::endl;
+
+	  FILE * fp = fopen("residualcg.txt", "a");
+	  fprintf(fp, "%d;%f;%f\n", k, cp, sqrt(cp/ssq));
+	  fclose(fp);
 
       // Stopping condition
       if (cp <= rsq) {

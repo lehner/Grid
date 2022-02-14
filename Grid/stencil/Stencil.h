@@ -38,6 +38,7 @@ extern int bj_asynch_setting;
 extern int bj_max_iter_diff;
 extern int bj_restart_length;
 extern int bj_synchronous_restarts;
+extern int bj_me;
 
 //BJ: Working variables
 extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
@@ -45,6 +46,7 @@ extern int bj_asynch;
 extern int bj_iteration;
 extern int bj_startsend_calls;
 extern int bj_completesend_calls;
+extern int bj_old_comms;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Must not lose sight that goal is to be able to construct really efficient
@@ -418,6 +420,23 @@ public:
   }
   
   
+  void CommunicateCheckOldComms(std::vector<std::vector<CommsRequest_t> > &reqs) {
+	
+	int flag = -1;
+    for (int i = 0; i < reqs.size(); i++) {
+	  for (int j = 0; j < reqs[i].size(); j++) {
+		flag = -1;
+	    MPI_Test(&reqs[i][j], &flag, MPI_STATUS_IGNORE);
+		if (!flag) {
+			printf("Found old comms at iter %d\n", bj_iteration);
+			bj_old_comms+=1;
+			MPI_Cancel(&reqs[i][j]);
+		}
+	  }
+	}
+	
+  }
+  
   ////////////////////////////////////////////////////////////
   // Non blocking send and receive. Necessarily parallel. ////
   ////////////////////////////////////////////////////////////
@@ -427,7 +446,7 @@ public:
     commtime-=usecond();
 	
     for(int i=0;i<Packets.size();i++) {
-		
+
       uint64_t bytes=_grid->StencilSendToRecvFromBegin(reqs[i],
 						     Packets[i].send_buf,
 						     Packets[i].to_rank,
@@ -488,34 +507,85 @@ public:
 		
     } else {
 		
+		//Check if there are pending communications from last call and cancel them
+		if (bj_reqs.size() != 0) {
+			this->CommunicateCheckOldComms(bj_reqs.back());
+		}
+		
 		//Create new reqs vector for this iteration and put it in the queue
 		std::vector<std::vector<CommsRequest_t> > reqs;
 		bj_reqs.push_back(reqs);
+		
+		//Print the recv buffer contents
+		if (bj_me == 1) {
+		printf("RECV Before comms, iter: %d, proc %d\n", bj_iteration, bj_me);
+		for(int i=0;i<Packets.size();i++) {
+		  char * tmp_ptr = (char *) Packets[i].recv_buf;
+		  for (int j=0; j < 20; j++) {
+			printf("%x, ", tmp_ptr[j]);
+		  }
+		  printf("\n");
+		}
+		}
+		//Print the send buffer contents
+		if (bj_me == 2 && 0) {
+		printf("SEND Before comms, iter: %d, proc %d\n", bj_iteration, bj_me);
+		for(int i=0;i<Packets.size();i++) {
+		  char * tmp_ptr = (char *) Packets[i].send_buf;
+		  for (int j=0; j < 20; j++) {
+			printf("%x, ", tmp_ptr[j]);
+		  }
+		  printf("\n");
+		}
+		}
+		//Print the send buffer contents
+		if (bj_me == 0 && 0) {
+		printf("SEND Before comms, iter: %d, proc %d\n", bj_iteration, bj_me);
+		for(int i=0;i<Packets.size();i++) {
+		  char * tmp_ptr = (char *) Packets[i].send_buf;
+		  for (int j=0; j < 20; j++) {
+			printf("%x, ", tmp_ptr[j]);
+		  }
+		  printf("\n");
+		}
+		}
 		
 		//Begin Communication and put the requests into the vector
 		this->CommunicateBegin(bj_reqs.back());
 		
 		//If not asynch, do a waitall
 		if (bj_asynch == 0) {
+			printf("Waitall at iter %d\n", bj_iteration);
 			this->CommunicateComplete(bj_reqs.back());
-			//bj_reqs.pop_back();
+		}
+
+		//Print the recv buffer contents
+		if (bj_me == 1) {
+		printf("RECV After comms, iter: %d, proc %d\n", bj_iteration, bj_me);
+		for(int i=0;i<Packets.size();i++) {
+		  char * tmp_ptr = (char *) Packets[i].recv_buf;
+		  for (int j=0; j < 20; j++) {
+			printf("%x, ", tmp_ptr[j]);
+		  }
+		  printf("\n");
+		}
 		}
 
 		//Print reqs
-		if (bj_iteration > 1 && 1) {
+		if (bj_iteration > 2 && 0) {
 			printf("Reqs vector size is: %d\n", bj_reqs.size());
-			printf("Reqs[0] vector size is: %d\n", bj_reqs[0].size());
-			printf("Reqs[0][0] vector size is: %d\n", bj_reqs[0][0].size());
+			printf("Reqs[1] vector size is: %d\n", bj_reqs[1].size());
+			printf("Reqs[1][0] vector size is: %d\n", bj_reqs[1][0].size());
 		}
 		
 	}
 	
   }
 
-  template<class compressor> void HaloExchange(const Lattice<vobj> &source,compressor &compress) {
-	  
-	printf("Trace: HaloExchange\n");
-    Prepare();
+  template<class compressor> void HaloExchange(const Lattice<vobj> &source,compressor &compress, const char* str = __builtin_FUNCTION()) {
+	
+	//printf("Trace: HaloExchange called by %s\n", str);	
+    Prepare();						//Resizes all vectors to 0, Packets among others
     HaloGather(source,compress);
     Communicate();
     CommsMergeSHM(compress);
@@ -1143,7 +1213,7 @@ public:
 			  &recv_buf[u_comm_offset],
 			  words,Decompressions);
 	  }
-
+	  printf("Trace: AddPacket1\n");
 	  AddPacket((void *)&send_buf[u_comm_offset],
 		    (void *)&recv_buf[u_comm_offset],
 		    xmit_to_rank,
@@ -1151,6 +1221,7 @@ public:
 		    bytes);
 
 	} else {
+	  //printf("Trace: AddPacket2\n");
 	  AddPacket((void *)&send_buf[u_comm_offset],
 		    (void *)&this->u_recv_buf_p[u_comm_offset],
 		    xmit_to_rank,
@@ -1281,6 +1352,7 @@ public:
 	    // assuming above pointer flip
 	    rpointers[i] = shm;
 
+	    printf("Trace: AddPacket3\n");
 	    AddPacket((void *)sp,(void *)rp,xmit_to_rank,recv_from_rank,bytes);
 
 

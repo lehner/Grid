@@ -29,6 +29,21 @@ directory
 #ifndef GRID_MINIMAL_RESIDUAL_H
 #define GRID_MINIMAL_RESIDUAL_H
 
+//BJ: Settings variables
+extern int bj_asynch_setting;
+extern int bj_max_iter_diff;
+extern int bj_restart_length;
+extern int bj_synchronous_restarts;
+extern int bj_me;
+
+//BJ: Working variables
+extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
+extern int bj_asynch;
+extern int bj_iteration;
+extern int bj_startsend_calls;
+extern int bj_completesend_calls;
+extern int bj_old_comms;
+
 namespace Grid {
 
 template<class Field> class MinimalResidual : public OperatorFunction<Field> {
@@ -47,6 +62,8 @@ template<class Field> class MinimalResidual : public OperatorFunction<Field> {
     : Tolerance(tol), MaxIterations(maxit), overRelaxParam(ovrelparam), ErrorOnNoConverge(err_on_no_conv){};
 
   void operator()(LinearOperatorBase<Field> &Linop, const Field &src, Field &psi) {
+	
+	bj_asynch = 0; //Turn asynch off so it the first communication is synch
 
     psi.Checkerboard() = src.Checkerboard();
     conformable(psi, src);
@@ -87,7 +104,11 @@ template<class Field> class MinimalResidual : public OperatorFunction<Field> {
 
     SolverTimer.Start();
     int k;
+	
+	if (bj_asynch_setting == 1) {bj_asynch = 1;}
+	
     for (k = 1; k <= MaxIterations; k++) {
+	  bj_iteration = k;
 
       MatrixTimer.Start();
       Linop.Op(r, Mr);
@@ -118,7 +139,9 @@ template<class Field> class MinimalResidual : public OperatorFunction<Field> {
       // Stopping condition
       if (cp <= rsq) {
         SolverTimer.Stop();
-
+		
+		bj_asynch = 0;
+		
         Linop.Op(psi, Mr);
         r = src - Mr;
 
@@ -134,9 +157,6 @@ template<class Field> class MinimalResidual : public OperatorFunction<Field> {
         std::cout << GridLogMessage << "MR Time elapsed: Total   " << SolverTimer.Elapsed() << std::endl;
         std::cout << GridLogMessage << "MR Time elapsed: Matrix  " << MatrixTimer.Elapsed() << std::endl;
         std::cout << GridLogMessage << "MR Time elapsed: Linalg  " << LinalgTimer.Elapsed() << std::endl;
-
-        if (ErrorOnNoConverge)
-          assert(true_residual / Tolerance < 10000.0);
 
         IterationsToComplete = k;
 

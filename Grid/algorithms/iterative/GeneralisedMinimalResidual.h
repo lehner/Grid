@@ -34,6 +34,7 @@ extern int bj_asynch_setting;
 extern int bj_max_iter_diff;
 extern int bj_restart_length;
 extern int bj_synchronous_restarts;
+extern int bj_me;
 
 //BJ: Working variables
 extern std::vector<std::vector<std::vector<Grid::CommsRequest_t>>> bj_reqs;
@@ -41,6 +42,7 @@ extern int bj_asynch;
 extern int bj_iteration;
 extern int bj_startsend_calls;
 extern int bj_completesend_calls;
+extern int bj_old_comms;
 
 namespace Grid {
 
@@ -142,7 +144,8 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
         std::cout << GridLogMessage << "GMRES Time elapsed: Linalg  " <<       LinalgTimer.Elapsed() << std::endl;
         std::cout << GridLogMessage << "GMRES Time elapsed: QR      " <<           QrTimer.Elapsed() << std::endl;
         std::cout << GridLogMessage << "GMRES Time elapsed: CompSol " << CompSolutionTimer.Elapsed() << std::endl;
-        return;
+        
+		return;
 		
       }
 	  
@@ -150,7 +153,7 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
 
     std::cout << GridLogMessage << "GeneralisedMinimalResidual did NOT converge" << std::endl;
 
-    if (ErrorOnNoConverge) {assert(0);}
+    //if (ErrorOnNoConverge) {assert(0);}
 	
   }
 
@@ -176,25 +179,48 @@ class GeneralisedMinimalResidual : public OperatorFunction<Field> {
     v[0] = (1. / gamma[0]) * r;
     LinalgTimer.Stop();
 
+	if (bj_asynch_setting == 1) {bj_asynch = 1;} //Turn asynch on for the iterations
+	  
     for (int i=0; i<RestartLength; i++) {
 
-	  if (bj_asynch_setting == 1) {bj_asynch = 1;} //Turn asynch on for the iterations
+	  //for (auto ijk: gamma)
+		//std::cout << ijk << ' ';
+	  //std::cout << "\n";
 
       IterationCount++;
 	  bj_iteration = IterationCount;
-	  //printf("I am at iteration %d\n", IterationCount);
 
+	  //If current iteration cycle is near the restart (beggining from and inlcuding iteration 25-bjtmpbuffer)
+	  //turn asynch off until a restart happened
+	  //Also happens for the bjtmpbuffer iterations after a restart
+	  int bjtmpbuffer = 0;
+	  if (i >= RestartLength-1-bjtmpbuffer && bj_asynch_setting == 1 && bj_synchronous_restarts == 1) {
+	    bj_asynch = 0;
+	  } else if (i < bjtmpbuffer && bj_asynch_setting == 1 && bj_synchronous_restarts == 1) {
+	    bj_asynch = 0; 
+	  } else if (bj_asynch_setting == 1){
+	    bj_asynch = 1; 
+	  }
+	  
+	  //printf("I am at iteration %d/%d, asynch is %d\n", IterationCount, i, bj_asynch);
+	  
       arnoldiStep(LinOp, v, w, i);
 
       qrUpdate(i);
 
       cp = norm(gamma[i+1]);
-
+	  
+	  char filename[19] = "residualgmresX.txt";
+	  filename[13] = bj_me+48;
+	  FILE * fp = fopen(filename, "a");
+	  fprintf(fp,"%d;%e\n", IterationCount, cp);
+	  fclose(fp);
+	  
       std::cout << GridLogIterative << "GeneralisedMinimalResidual: Iteration " << IterationCount
                 << " residual " << cp << " target " << rsq << std::endl;
 
       if ((i == RestartLength - 1) || (IterationCount == MaxIterations) || (cp <= rsq)) {
-	    if (bj_asynch_setting == 1 && bj_synchronous_restarts == 1) {bj_asynch = 0;}
+		if (bj_asynch_setting == 1 && bj_synchronous_restarts == 1) {bj_asynch = 0;} //Turn asynch off for restart or result calcs
         computeSolution(v, psi, i);
         return cp;
       }
