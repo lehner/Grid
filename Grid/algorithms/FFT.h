@@ -168,6 +168,7 @@ public:
   template<class vobj>
   void FFT_dim(Lattice<vobj> &result,const Lattice<vobj> &source,int dim, int sign){
 #ifndef HAVE_FFTW
+#error "fftw is required for FFT_dim"
     assert(0);
 #else
     conformable(result.Grid(),vgrid);
