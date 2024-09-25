@@ -46,7 +46,7 @@ NAMESPACE_BEGIN(Grid);
 
 #if defined (GRID_COMMS_MPI3) 
 typedef MPI_Comm    Grid_MPI_Comm;
-typedef MPI_Request CommsRequest_t;
+struct CommsRequest_t { MPI_Request request; void* recv; int rbytes; };
 #else 
 typedef int CommsRequest_t;
 typedef int Grid_MPI_Comm;

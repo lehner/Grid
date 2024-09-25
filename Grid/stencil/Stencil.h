@@ -441,13 +441,15 @@ public:
 					Packets[i].to_rank,Packets[i].do_send,
 					Packets[i].recv_buf,
 					Packets[i].from_rank,Packets[i].do_recv,
-					Packets[i].xbytes,Packets[i].rbytes,i);
+					Packets[i].xbytes,Packets[i].rbytes,i,
+					sizeof(typename getPrecision<cobj>::real_scalar_type));
     }
   }
 
   void CommunicateComplete(std::vector<std::vector<CommsRequest_t> > &reqs)
   {
-    _grid->StencilSendToRecvFromComplete(MpiReqs,0);
+    _grid->StencilSendToRecvFromComplete(MpiReqs,0,
+					 sizeof(typename getPrecision<cobj>::real_scalar_type));
     if   ( this->partialDirichlet ) DslashLogPartial();
     else if ( this->fullDirichlet ) DslashLogDirichlet();
     else DslashLogFull();

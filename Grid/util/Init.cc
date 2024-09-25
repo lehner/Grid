@@ -454,7 +454,8 @@ void Grid_init(int *argc,char ***argv)
     std::cout<<GridLogMessage<<std::endl;
     std::cout<<GridLogMessage<<"  --comms-concurrent : Asynchronous MPI calls; several dirs at a time "<<std::endl;    
     std::cout<<GridLogMessage<<"  --comms-sequential : Synchronous MPI calls; one dirs at a time "<<std::endl;    
-    std::cout<<GridLogMessage<<"  --comms-overlap    : Overlap comms with compute "<<std::endl;    
+    std::cout<<GridLogMessage<<"  --comms-overlap    : Overlap comms with compute "<<std::endl;
+    std::cout<<GridLogMessage<<"  --comms-half-prec  : Compress halo exchange data to half-precision "<<std::endl;    
     std::cout<<GridLogMessage<<std::endl;
     std::cout<<GridLogMessage<<"  --dslash-generic: Wilson kernel for generic Nc"<<std::endl;    
     std::cout<<GridLogMessage<<"  --dslash-unroll : Wilson kernel for Nc=3"<<std::endl;    
@@ -488,6 +489,10 @@ void Grid_init(int *argc,char ***argv)
   } else {
     WilsonKernelsStatic::Comms = WilsonKernelsStatic::CommsThenCompute;
     StaggeredKernelsStatic::Comms = StaggeredKernelsStatic::CommsThenCompute;
+  }
+  if( GridCmdOptionExists(*argv,*argv+*argc,"--comms-bfloat16") ){
+    CartesianCommunicator::SetStencilCompressionPolicy(CartesianCommunicator::StencilCompressionPolicyBfloat16);
+    std::cout << GridLogMessage << "Compress floats to bfloat16 in stencil halo exchange" << std::endl;
   }
   if( GridCmdOptionExists(*argv,*argv+*argc,"--comms-concurrent") ){
     CartesianCommunicator::SetCommunicatorPolicy(CartesianCommunicator::CommunicatorPolicyConcurrent);
