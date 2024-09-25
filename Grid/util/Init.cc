@@ -455,7 +455,7 @@ void Grid_init(int *argc,char ***argv)
     std::cout<<GridLogMessage<<"  --comms-concurrent : Asynchronous MPI calls; several dirs at a time "<<std::endl;    
     std::cout<<GridLogMessage<<"  --comms-sequential : Synchronous MPI calls; one dirs at a time "<<std::endl;    
     std::cout<<GridLogMessage<<"  --comms-overlap    : Overlap comms with compute "<<std::endl;
-    std::cout<<GridLogMessage<<"  --comms-half-prec  : Compress halo exchange data to half-precision "<<std::endl;    
+    std::cout<<GridLogMessage<<"  --comms-bfloat16   : Compress halo exchange data from float to bfloat16 "<<std::endl;    
     std::cout<<GridLogMessage<<std::endl;
     std::cout<<GridLogMessage<<"  --dslash-generic: Wilson kernel for generic Nc"<<std::endl;    
     std::cout<<GridLogMessage<<"  --dslash-unroll : Wilson kernel for Nc=3"<<std::endl;    
