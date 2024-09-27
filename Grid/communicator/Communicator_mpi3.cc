@@ -399,7 +399,7 @@ double CartesianCommunicator::StencilSendToRecvFromBegin(std::vector<CommsReques
 	});
       double t1 = usecond() / 1e6;
       double GBps = (2.*xbytes/1e9)/(t1-t0);
-      std::cout << GridLogMessage << "Compress at " << GBps << " GB/s for nwords = " << nwords << std::endl;
+      //std::cout << GridLogMessage << "Compress at " << GBps << " GB/s for nwords = " << nwords << std::endl;
 
       // bfloat[0]  bfloat[nwords_half]  bfloat[1]  bfloat[nwords_half + 1]  ...
     }
@@ -485,7 +485,7 @@ void CartesianCommunicator::StencilSendToRecvFromComplete(std::vector<CommsReque
     
     double t1 = usecond() / 1e6;
     double GBps = Gb/(t1-t0);
-    std::cout << GridLogMessage << "Decompress at " << GBps << " GB/s for GB =" << Gb << std::endl;
+    //std::cout << GridLogMessage << "Decompress at " << GBps << " GB/s for GB =" << Gb << std::endl;
 
   }
 
