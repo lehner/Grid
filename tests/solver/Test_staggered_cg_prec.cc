@@ -69,7 +69,7 @@ int main (int argc, char ** argv)
   src = Zero();
   ColourVector ColourKronecker;
   ColourKronecker = Zero();
-  ColourKronecker()()(0) = 1.0;
+  ColourKronecker()()(1) = 1.0;
   Coordinate site({0,0,0,0}); // Point source at origin
   pokeSite(ColourKronecker,src,site);
   RealD nrm = norm2(src);
@@ -138,7 +138,8 @@ int main (int argc, char ** argv)
   src=Zero();
   pokeSite(ColourKronecker,src,site);
   FermionField out(&Grid);
-  Ds.Dhop(src,out,0);
+  //Ds.Dhop(src,out,0);
+  Ds.M(src,out);
   nrm = norm2(out);
   std::cout<<GridLogMessage << "Dhop * src "<< std::endl;
   std::cout<<GridLogMessage << out << std::endl;
