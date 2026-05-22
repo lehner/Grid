@@ -198,12 +198,15 @@ __global__ void reduceKernel(const vobj *lat, sobj *buffer, Iterator n) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Possibly promote to double and sum
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#undef GRID_REDUCTION_TIMING
+
 template <class vobj>
-inline typename vobj::scalar_objectD sumD_gpu_small(const vobj *lat, Integer osites) 
+inline typename vobj::scalar_objectD sumD_gpu_small(const vobj *lat, Integer osites)
 {
   typedef typename vobj::scalar_objectD sobj;
   typedef decltype(lat) Iterator;
-  
+
   Integer nsimd= vobj::Nsimd();
   Integer size = osites*nsimd;
 
@@ -212,41 +215,188 @@ inline typename vobj::scalar_objectD sumD_gpu_small(const vobj *lat, Integer osi
   GRID_ASSERT(ok);
 
   Integer smemSize = numThreads * sizeof(sobj);
-  // Move out of UVM
-  // Turns out I had messed up the synchronise after move to compute stream
-  // as running this on the default stream fools the synchronise
   deviceVector<sobj> buffer(numBlocks);
   sobj *buffer_v = &buffer[0];
   sobj result;
+
+#ifdef GRID_REDUCTION_TIMING
+  RealD t_kernel = -usecond();
+#endif
   reduceKernel<<< numBlocks, numThreads, smemSize, computeStream >>>(lat, buffer_v, size);
   accelerator_barrier();
+#ifdef GRID_REDUCTION_TIMING
+  t_kernel += usecond();
+  RealD t_d2h = -usecond();
+#endif
   acceleratorCopyFromDevice(buffer_v,&result,sizeof(result));
+#ifdef GRID_REDUCTION_TIMING
+  t_d2h += usecond();
+  std::cout << GridLogDebug << "  sumD_gpu_small"
+            << " sizeof(sobj)=" << sizeof(sobj)
+            << " blocks=" << numBlocks << " threads=" << numThreads
+            << " kernel+barrier=" << t_kernel << " us"
+            << " D2H=" << t_d2h << " us" << std::endl;
+#endif
   return result;
+}
+
+// Fused pack+reduce: reads R words of each vobj at word offset 'base',
+// accumulates directly into iVector<iScalar<scalarD>,R> without staging
+// through an intermediate bundle buffer.  One HBM pass instead of three.
+template <int R, class vobj, class sobj, class Iterator>
+__device__ void packReduceBlocks(
+    const iScalar<typename vobj::vector_type> *idat,
+    sobj *g_odata, Iterator osites, int base, int words)
+{
+  constexpr Iterator nsimd = vobj::Nsimd();
+  Iterator blockSize = blockDim.x;
+
+  extern __shared__ __align__(COALESCE_GRANULARITY) unsigned char shmem_pointer[];
+  sobj *sdata = (sobj *)shmem_pointer;
+
+  Iterator tid      = threadIdx.x;
+  Iterator i        = blockIdx.x * (blockSize * 2) + threadIdx.x;
+  Iterator gridSize = blockSize * 2 * gridDim.x;
+  sobj mySum = Zero();
+
+  while (i < osites * nsimd) {
+    Iterator lane = i % nsimd;
+    Iterator ss   = i / nsimd;
+    sobj tmpD; zeroit(tmpD);
+    for (int k = 0; k < R; k++) {
+      auto w = extractLane(lane, idat[ss * words + base + k]);
+      iScalar<typename vobj::scalar_typeD> wd; wd = w;
+      tmpD._internal[k] = wd;
+    }
+    mySum += tmpD;
+
+    if (i + blockSize < osites * nsimd) {
+      lane = (i + blockSize) % nsimd;
+      ss   = (i + blockSize) / nsimd;
+      sobj tmpD2; zeroit(tmpD2);
+      for (int k = 0; k < R; k++) {
+        auto w = extractLane(lane, idat[ss * words + base + k]);
+        iScalar<typename vobj::scalar_typeD> wd; wd = w;
+        tmpD2._internal[k] = wd;
+      }
+      mySum += tmpD2;
+    }
+    i += gridSize;
+  }
+
+  reduceBlock(sdata, mySum, tid);
+  if (tid == 0) g_odata[blockIdx.x] = sdata[0];
+}
+
+template <int R, class vobj, class sobj, class Iterator>
+__global__ void packReduceKernel(
+    const iScalar<typename vobj::vector_type> *idat,
+    sobj *buffer, Iterator osites, int base, int words)
+{
+  Iterator blockSize = blockDim.x;
+
+  packReduceBlocks<R, vobj, sobj>(idat, buffer, osites, base, words);
+
+  if (gridDim.x > 1) {
+    const Iterator tid = threadIdx.x;
+    __shared__ bool amLast;
+    extern __shared__ __align__(COALESCE_GRANULARITY) unsigned char shmem_pointer[];
+    sobj *smem = (sobj *)shmem_pointer;
+
+    acceleratorFence();
+
+    if (tid == 0) {
+      unsigned int ticket = atomicInc(&retirementCount, gridDim.x);
+      amLast = (ticket == gridDim.x - 1);
+    }
+    acceleratorSynchroniseAll();
+
+    if (amLast) {
+      Iterator i = tid;
+      sobj mySum = Zero();
+      while (i < (Iterator)gridDim.x) {
+        mySum += buffer[i];
+        i += blockSize;
+      }
+      reduceBlock(smem, mySum, tid);
+      if (tid == 0) {
+        buffer[0] = smem[0];
+        retirementCount = 0;
+      }
+    }
+  }
+}
+
+template<int R, class vobj>
+inline void sumD_gpu_reduce_words(const vobj *lat, Integer osites,
+                                   typename vobj::scalar_typeD *ret_p, int base)
+{
+  typedef typename vobj::vector_type  vector;
+  typedef typename vobj::scalar_typeD scalarD;
+  using BundleScalarD = iVector<iScalar<scalarD>, R>;
+
+  constexpr int Nsimd = vobj::Nsimd();
+  const int words = sizeof(vobj) / sizeof(vector);
+  const iScalar<vector> *idat = (const iScalar<vector> *)lat;
+
+  Integer size = (Integer)osites * Nsimd;
+  Integer numThreads, numBlocks;
+  int ok = getNumBlocksAndThreads(size, sizeof(BundleScalarD), numThreads, numBlocks);
+  GRID_ASSERT(ok);
+
+  Integer smemSize = numThreads * sizeof(BundleScalarD);
+  deviceVector<BundleScalarD> buffer(numBlocks);
+  BundleScalarD *buffer_v = &buffer[0];
+  BundleScalarD result;
+
+#ifdef GRID_REDUCTION_TIMING
+  RealD t_kernel = -usecond();
+#endif
+  packReduceKernel<R, vobj, BundleScalarD, Integer>
+    <<<numBlocks, numThreads, smemSize, computeStream>>>
+    (idat, buffer_v, osites, base, words);
+  accelerator_barrier();
+#ifdef GRID_REDUCTION_TIMING
+  t_kernel += usecond();
+  RealD t_d2h = -usecond();
+#endif
+  acceleratorCopyFromDevice(buffer_v, &result, sizeof(result));
+#ifdef GRID_REDUCTION_TIMING
+  t_d2h += usecond();
+  std::cout << GridLogDebug << " sumD_gpu_reduce_words R=" << R
+            << " base=" << base
+            << " kernel=" << t_kernel << " D2H=" << t_d2h << " us" << std::endl;
+#endif
+
+  for (int k = 0; k < R; k++)
+    ret_p[base + k] = TensorRemove(result._internal[k]);
 }
 
 template <class vobj>
 inline typename vobj::scalar_objectD sumD_gpu_large(const vobj *lat, Integer osites)
 {
-  typedef typename vobj::vector_type  vector;
-  typedef typename vobj::scalar_typeD scalarD;
-  typedef typename vobj::scalar_objectD sobj;
-  sobj ret;
+  typedef typename vobj::vector_type    vector;
+  typedef typename vobj::scalar_typeD   scalarD;
+  typedef typename vobj::scalar_objectD sobjD;
+
+  const int words = sizeof(vobj) / sizeof(vector);
+  sobjD ret; zeroit(ret);
   scalarD *ret_p = (scalarD *)&ret;
-  
-  const int words = sizeof(vobj)/sizeof(vector);
 
-  deviceVector<vector> buffer(osites);
-  vector *dat = (vector *)lat;
-  vector *buf = &buffer[0];
-  iScalar<vector> *tbuf =(iScalar<vector> *)  &buffer[0];
-  for(int w=0;w<words;w++) {
+#ifdef GRID_REDUCTION_TIMING
+  RealD t_large = -usecond();
+#endif
+  int w = 0;
+  while (w + 12 <= words) { sumD_gpu_reduce_words<12>(lat, osites, ret_p, w); w += 12; }
+  while (w +  4 <= words) { sumD_gpu_reduce_words< 4>(lat, osites, ret_p, w); w +=  4; }
+  while (w      <  words) { sumD_gpu_reduce_words< 1>(lat, osites, ret_p, w); w +=  1; }
+#ifdef GRID_REDUCTION_TIMING
+  t_large += usecond();
+  std::cout << GridLogDebug << "sumD_gpu_large"
+            << " sizeof(sobjD)=" << sizeof(sobjD)
+            << " words=" << words << " total=" << t_large << " us" << std::endl;
+#endif
 
-    accelerator_for(ss,osites,1,{
-	buf[ss] = dat[ss*words+w];
-      });
-      
-    ret_p[w] = sumD_gpu_small(tbuf,osites);
-  }
   return ret;
 }
 
