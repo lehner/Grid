@@ -655,7 +655,8 @@ inline void acceleratorFreeCpu  (void *ptr){free(ptr);};
 //////////////////////////////////////////////
 
 #ifdef GRID_SYCL
-inline void acceleratorFenceComputeStream(void){ theGridAccelerator->ext_oneapi_submit_barrier(); theGridAccelerator->ext_oneapi_submit_barrier(); };
+//inline void acceleratorFenceComputeStream(void){ theGridAccelerator->ext_oneapi_submit_barrier(); theGridAccelerator->ext_oneapi_submit_barrier(); };
+inline void acceleratorFenceComputeStream(void){ theGridAccelerator->wait(); theGridAccelerator->wait(); };
 #else
 // Ordering within a stream guaranteed on Nvidia & AMD
 inline void acceleratorFenceComputeStream(void){ };
