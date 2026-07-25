@@ -314,7 +314,14 @@ static void FFT_dim_execute(
   FFTW_scalar *in  = (FFTW_scalar *)pgbuf_v;
   FFTW_scalar *out = (FFTW_scalar *)pgbuf_v;
   t_fft = -usecond();
+#ifdef GRID_SYCL
+  hostVector<scalar> host_in(pgbuf.size());
+  acceleratorCopyFromDevice(in, &host_in[0], sizeof(scalar) * pgbuf.size());
+  FFTW<scalar>::fftw_execute_dft(p, (FFTW_scalar*)&host_in[0], (FFTW_scalar*)&host_in[0], sign);
+  acceleratorCopyToDevice(&host_in[0], out, sizeof(scalar) * pgbuf.size());
+#else
   FFTW<scalar>::fftw_execute_dft(p, in, out, sign);
+#endif
   t_fft += usecond();
 
   flops_call = 5.0 * howmany * G * log2(G);
