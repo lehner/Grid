@@ -52,6 +52,13 @@ inline void *memalign(size_t align, size_t bytes) { return malloc(bytes); }
 NAMESPACE_BEGIN(Grid);
 
 //////////////////////////////////////////////////////////////////////////////////
+// Host allocation alignment: GRID_ALLOC_ALIGN (2 MB, huge pages) only for allocations of at least that size;
+// smaller ones are page aligned, so that they can share pages (with transparent huge pages, a 2 MB-aligned small
+// allocation would otherwise occupy a 2 MB page of its own).  4096 bytes exceeds every SIMD alignment requirement.
+//////////////////////////////////////////////////////////////////////////////////
+inline size_t acceleratorAllocAlign(size_t bytes) { return bytes >= GRID_ALLOC_ALIGN ? GRID_ALLOC_ALIGN : 4096; }
+
+//////////////////////////////////////////////////////////////////////////////////
 // Accelerator primitives; fall back to threading if not CUDA or SYCL
 //////////////////////////////////////////////////////////////////////////////////
 //
@@ -629,15 +636,15 @@ inline void acceleratorCopySynchronise(void) {};
 inline int  acceleratorIsCommunicable(void *ptr){ return 1; }
 inline void acceleratorMemSet(void *base,int value,size_t bytes) { memset(base,value,bytes);}
 #ifdef HAVE_MM_MALLOC_H
-inline void *acceleratorAllocHost(size_t bytes){return _mm_malloc(bytes,GRID_ALLOC_ALIGN);};
-inline void *acceleratorAllocShared(size_t bytes){return _mm_malloc(bytes,GRID_ALLOC_ALIGN);};
-inline void *acceleratorAllocDevice(size_t bytes){return _mm_malloc(bytes,GRID_ALLOC_ALIGN);};
+inline void *acceleratorAllocHost(size_t bytes){return _mm_malloc(bytes,acceleratorAllocAlign(bytes));};
+inline void *acceleratorAllocShared(size_t bytes){return _mm_malloc(bytes,acceleratorAllocAlign(bytes));};
+inline void *acceleratorAllocDevice(size_t bytes){return _mm_malloc(bytes,acceleratorAllocAlign(bytes));};
 inline void acceleratorFreeHost(void *ptr){_mm_free(ptr);};
 inline void acceleratorFreeShared(void *ptr){_mm_free(ptr);};
 inline void acceleratorFreeDevice(void *ptr){_mm_free(ptr);};
 #else
-inline void *acceleratorAllocShared(size_t bytes){return memalign(GRID_ALLOC_ALIGN,bytes);};
-inline void *acceleratorAllocDevice(size_t bytes){return memalign(GRID_ALLOC_ALIGN,bytes);};
+inline void *acceleratorAllocShared(size_t bytes){return memalign(acceleratorAllocAlign(bytes),bytes);};
+inline void *acceleratorAllocDevice(size_t bytes){return memalign(acceleratorAllocAlign(bytes),bytes);};
 inline void acceleratorFreeShared(void *ptr){free(ptr);};
 inline void acceleratorFreeDevice(void *ptr){free(ptr);};
 #endif
@@ -645,10 +652,10 @@ inline void acceleratorFreeDevice(void *ptr){free(ptr);};
 #endif // CPU target
 
 #ifdef HAVE_MM_MALLOC_H
-inline void *acceleratorAllocCpu(size_t bytes){return _mm_malloc(bytes,GRID_ALLOC_ALIGN);};
+inline void *acceleratorAllocCpu(size_t bytes){return _mm_malloc(bytes,acceleratorAllocAlign(bytes));};
 inline void acceleratorFreeCpu  (void *ptr){_mm_free(ptr);};
 #else
-inline void *acceleratorAllocCpu(size_t bytes){return memalign(GRID_ALLOC_ALIGN,bytes);};
+inline void *acceleratorAllocCpu(size_t bytes){return memalign(acceleratorAllocAlign(bytes),bytes);};
 inline void acceleratorFreeCpu  (void *ptr){free(ptr);};
 #endif
 
